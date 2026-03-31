@@ -808,7 +808,13 @@ const LANG_COLOR_HEX = {
   vue:        "#42b883",
   css:        "#e96900",
   scss:       "#cc6699",
-  less:       "#1d365d",
+  less:       "#2a9fd6",
+  go:         "#00add8",
+  ruby:       "#cc342d",
+  rust:       "#f74c00",
+  java:       "#b07219",
+  kotlin:     "#a97bff",
+  php:        "#777bb4",
 };
 
 // Active language filter — populated after data load
@@ -880,7 +886,12 @@ function updateLangLegend() {
   // Sync filter to langs present (add any new ones as active)
   langs.forEach(l => { if (!LANG_FILTER.has(l) && LANG_FILTER.size === 0) LANG_FILTER.add(l); });
 
-  const LANG_LABELS = { python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript', vue: 'Vue', css: 'CSS', scss: 'SCSS', less: 'Less' };
+  const LANG_LABELS = {
+    python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript',
+    vue: 'Vue', css: 'CSS', scss: 'SCSS', less: 'Less',
+    go: 'Go', ruby: 'Ruby', rust: 'Rust',
+    java: 'Java', kotlin: 'Kotlin', php: 'PHP',
+  };
   container.innerHTML = langs.map(lang => {
     const active = LANG_FILTER.has(lang);
     const color = LANG_COLOR_HEX[lang] || '#888';

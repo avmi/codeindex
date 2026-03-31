@@ -9,41 +9,65 @@ import json
 import sys
 from pathlib import Path
 
-# Ensure the project root is on sys.path so `analyzers` package is importable
 sys.path.insert(0, str(Path(__file__).parent))
-from analyzers import python_analyzer, js_analyzer, css_analyzer
+from analyzers import (
+    python_analyzer,
+    js_analyzer,
+    css_analyzer,
+    go_analyzer,
+    ruby_analyzer,
+    rust_analyzer,
+    java_analyzer,
+    php_analyzer,
+)
 
-_SKIP = {"__pycache__", ".venv", "venv", "env", ".git", "node_modules", "dist", "build", ".next"}
+_SKIP = {
+    "__pycache__", ".venv", "venv", "env", ".git",
+    "node_modules", "dist", "build", ".next",
+    "target", "vendor", ".bundle",
+}
 
 
-def detect_languages(root: Path):
-    """Return a list of language identifiers found in the repo."""
+def _has_files(root: Path, patterns: list, skip_dirs: set = None) -> bool:
+    skip = skip_dirs or _SKIP
+    return any(not any(part in skip for part in p.parts) for p in root.rglob(patterns[0]))
+
+
+def _any_match(root: Path, globs: list) -> bool:
+    return any(
+        p for g in globs for p in root.rglob(g)
+        if not any(part in _SKIP for part in p.parts)
+    )
+
+
+def detect_languages(root: Path) -> list:
     langs = []
 
-    # Python: any .py file outside skip dirs
-    if any(
-        p for p in root.rglob("*.py")
-        if not any(part in _SKIP for part in p.parts)
-    ):
+    if _any_match(root, ["*.py"]):
         langs.append("python")
 
-    # JavaScript / TypeScript / Vue
     js_signals = ["*.js", "*.ts", "*.jsx", "*.tsx", "*.mjs", "*.vue"]
-    if (root / "package.json").exists() or any(
-        p for sig in js_signals
-        for p in root.rglob(sig)
-        if not any(part in _SKIP for part in p.parts)
-    ):
+    if (root / "package.json").exists() or _any_match(root, js_signals):
         langs.append("javascript")
 
-    # CSS / SCSS / Less
     css_signals = ["*.css", "*.scss", "*.sass", "*.less", "*.styl"]
-    if any(
-        p for sig in css_signals
-        for p in root.rglob(sig)
-        if not any(part in _SKIP for part in p.parts)
-    ):
+    if _any_match(root, css_signals):
         langs.append("css")
+
+    if (root / "go.mod").exists() or _any_match(root, ["*.go"]):
+        langs.append("go")
+
+    if (root / "Gemfile").exists() or _any_match(root, ["*.rb"]):
+        langs.append("ruby")
+
+    if (root / "Cargo.toml").exists() or _any_match(root, ["*.rs"]):
+        langs.append("rust")
+
+    if _any_match(root, ["*.java", "*.kt", "*.kts"]):
+        langs.append("java")
+
+    if (root / "composer.json").exists() or _any_match(root, ["*.php"]):
+        langs.append("php")
 
     return langs
 
@@ -54,12 +78,24 @@ def merge_links(target: dict, source: dict) -> None:
 
 
 def link_kind(s_type: str, t_type: str) -> str:
-    """Determine the semantic kind of a dependency edge."""
     if s_type == "style" or t_type == "style":
         return "styles"
     if s_type in {"component", "route"} and t_type in {"component", "route"}:
         return "renders"
     return "imports"
+
+
+# Maps language id → analyzer module
+_ANALYZERS = {
+    "python":     python_analyzer,
+    "javascript": js_analyzer,
+    "css":        css_analyzer,
+    "go":         go_analyzer,
+    "ruby":       ruby_analyzer,
+    "rust":       rust_analyzer,
+    "java":       java_analyzer,
+    "php":        php_analyzer,
+}
 
 
 def analyze(root_path: str) -> dict:
@@ -71,53 +107,55 @@ def analyze(root_path: str) -> dict:
     if not langs:
         print(f"Warning: no supported languages detected in {root}", file=sys.stderr)
 
-    group_map = {}
-    all_nodes = []
-    all_links_map = {}
-    external_seen = set()
-    total_files = 0
-    total_loc = 0
-    meta_extra = {}
+    group_map    = {}
+    all_nodes    = []
+    all_links    = {}
+    ext_seen     = set()
+    total_files  = 0
+    total_loc    = 0
+    meta_extra   = {}
 
     def add_results(nodes, ext_nodes, links_map, meta):
         nonlocal total_files, total_loc
         all_nodes.extend(nodes)
         for en in ext_nodes:
-            if en["id"] not in external_seen:
+            if en["id"] not in ext_seen:
                 all_nodes.append(en)
-                external_seen.add(en["id"])
-        merge_links(all_links_map, links_map)
+                ext_seen.add(en["id"])
+        merge_links(all_links, links_map)
         total_files += meta.get("total_files", 0)
-        total_loc += meta.get("total_loc", 0)
-
-    if "python" in langs:
-        nodes, ext_nodes, links_map, meta = python_analyzer.analyze(root, group_map)
-        add_results(nodes, ext_nodes, links_map, meta)
-
-    if "javascript" in langs:
-        nodes, ext_nodes, links_map, meta = js_analyzer.analyze(root, group_map)
-        add_results(nodes, ext_nodes, links_map, meta)
+        total_loc   += meta.get("total_loc", 0)
         for key in ("framework", "packageManager"):
             if meta.get(key):
-                meta_extra[key] = meta[key]
+                meta_extra.setdefault(key, meta[key])
 
-    if "css" in langs:
-        nodes, ext_nodes, links_map, meta = css_analyzer.analyze(root, group_map)
-        add_results(nodes, ext_nodes, links_map, meta)
+    for lang in langs:
+        analyzer = _ANALYZERS.get(lang)
+        if analyzer:
+            try:
+                result = analyzer.analyze(root, group_map)
+                add_results(*result)
+            except Exception as e:
+                print(f"Warning: {lang} analyzer failed: {e}", file=sys.stderr)
 
     # Build links with semantic kind annotation
     node_type_map = {n["id"]: n.get("type", "module") for n in all_nodes}
-    links = []
-    for (s, t), w in all_links_map.items():
-        kind = link_kind(node_type_map.get(s, "module"), node_type_map.get(t, "module"))
-        links.append({"source": s, "target": t, "weight": w, "kind": kind})
+    links = [
+        {
+            "source": s,
+            "target": t,
+            "weight": w,
+            "kind":   link_kind(node_type_map.get(s, "module"), node_type_map.get(t, "module")),
+        }
+        for (s, t), w in all_links.items()
+    ]
 
     return {
         "meta": {
-            "root": str(root.name) + "/",
+            "root":        str(root.name) + "/",
             "total_files": total_files,
-            "total_loc": total_loc,
-            "languages": langs,
+            "total_loc":   total_loc,
+            "languages":   langs,
             **meta_extra,
         },
         "nodes": all_nodes,
@@ -134,9 +172,9 @@ def main():
 
     print(f"Analyzing {args.repo} …", file=sys.stderr)
     data = analyze(args.repo)
-    out = Path(args.output)
+    out  = Path(args.output)
     out.write_text(json.dumps(data, indent=2))
-    meta = data["meta"]
+    meta      = data["meta"]
     langs_str = ", ".join(meta.get("languages", ["unknown"]))
     print(
         f"Done. {meta['total_files']} files, {meta['total_loc']} LOC "

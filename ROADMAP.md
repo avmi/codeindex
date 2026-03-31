@@ -64,18 +64,18 @@ The core extension point is `analyze_repo.py`, which produces a language-agnosti
 
 ---
 
-## Phase 3 — Multi-language Backend Support
+## Phase 3 — Multi-language Backend Support ✅ COMPLETE
 
 **Goal:** Support common server-side languages using the same plugin pattern from Phase 1.
 
 ### Tasks
-- [ ] `analyzers/go_analyzer.py` — `.go` files, `go.mod` for deps, `import "pkg/path"` parsing
-- [ ] `analyzers/ruby_analyzer.py` — `.rb` files, `Gemfile`, `require 'file'` parsing
-- [ ] `analyzers/rust_analyzer.py` — `.rs` files, `Cargo.toml`, `use crate::module` parsing
-- [ ] `analyzers/java_analyzer.py` — `.java`/`.kt` files, `pom.xml`/`build.gradle`, `import com.pkg.Class`
-- [ ] `analyzers/php_analyzer.py` — `.php` files, `composer.json`, `require`/`use` parsing
-- [ ] Update dispatcher to detect and run all relevant analyzers for a repo
-- [ ] Update frontend colors and language filter for new languages
+- [x] `analyzers/go_analyzer.py` — package-level nodes (one per dir), `go.mod` module resolution, `import "pkg"` parsing
+- [x] `analyzers/ruby_analyzer.py` — `.rb` files, `Gemfile` framework detection (Rails/Sinatra/Hanami), `require`/`require_relative`/`autoload`
+- [x] `analyzers/rust_analyzer.py` — `.rs` files, `Cargo.toml` deps, `mod foo;` declarations + `use crate::` resolution
+- [x] `analyzers/java_analyzer.py` — `.java`/`.kt` files, two-pass FQN mapping, wildcard import support
+- [x] `analyzers/php_analyzer.py` — `.php` files, `composer.json` PSR-4 namespace resolution, `require`/`use` parsing
+- [x] Dispatcher updated — single `_ANALYZERS` table, error-isolated per language, `meta_extra` merged
+- [x] Frontend colors added: Go (#00add8), Ruby (#cc342d), Rust (#f74c00), Java (#b07219), Kotlin (#a97bff), PHP (#777bb4)
 
 ### Language Detection Heuristics
 | Signal | Language |
