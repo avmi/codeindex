@@ -293,7 +293,7 @@ Three workflows, ordered by automation level.
 
 ### Workflow 1 — MCP server (recommended for active coding)
 
-Claude gets a `lookup_symbol` tool it calls automatically. No extra prompting needed.
+Claude gets symbol lookup, dependency, and impact tools it calls automatically. No extra prompting needed.
 
 **One-time setup:**
 ```bash
@@ -314,7 +314,9 @@ Add to `.claude/settings.json` (shared/committed) or `.claude/settings.local.jso
 }
 ```
 
-Claude now has `lookup_symbol`, `build_symbol_index`, `get_impact`, and `get_dependencies` available as tools in every session. When it needs to find `processPayment`, it calls `lookup_symbol("processPayment")` and gets `src/billing.py:142` back in one shot — no file scanning.
+> **Note:** If `codeindex` isn't on Claude Code's PATH (common with conda/virtualenv installs), use the absolute path: `"command": "/path/to/codeindex"`. Run `which codeindex` to find it.
+
+Claude now has all 6 MCP tools available in every session. When it needs to find `processPayment`, it calls `lookup_symbol("processPayment")` and gets `src/billing.py:142` back in one shot — no file scanning.
 
 **Keep the index fresh:**
 ```bash
@@ -365,6 +367,27 @@ This costs almost no tokens but primes Claude to use the index rather than defau
 
 ---
 
+### CLI quick reference for human use
+
+The same data available via MCP is also accessible directly from the terminal:
+
+```bash
+# Find where a symbol is defined
+codeindex lookup MyClassName
+codeindex lookup process_payment --json
+
+# Show what a file imports and what depends on it
+codeindex dependencies src/auth.py
+
+# List the riskiest files to change
+codeindex high-blast --threshold 5
+
+# Blast-radius report before touching a file
+codeindex impact src/auth.py
+```
+
+---
+
 ### Which workflow to pick
 
 | Situation | Workflow |
@@ -373,6 +396,7 @@ This costs almost no tokens but primes Claude to use the index rather than defau
 | Medium repo, frequent symbol lookups | CLAUDE.md injection |
 | Large repo (1000+ files) | MCP server + short CLAUDE.md hint |
 | Quick one-off in an unfamiliar repo | `codeindex symbols . --claude-md`, delete after |
+| Terminal / scripting use | CLI commands (`lookup`, `dependencies`, `high-blast`) |
 
 ---
 
